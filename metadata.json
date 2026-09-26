@@ -1,0 +1,6 @@
+{
+  "name": "SQUISHY - Jelly Pet Life Simulation",
+  "description": "Adopt, feed, dress, and explore with Squishy, an adorable soft jelly dumpling companion in a colorful toybox world.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
