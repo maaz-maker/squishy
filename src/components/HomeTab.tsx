@@ -7,6 +7,7 @@ import { DailyMissionsCard } from './DailyMissionsCard';
 import { JournalCard } from './JournalCard';
 import { JournalModal } from './JournalModal';
 import { updateMissionCategoryProgress, DEFAULT_DAILY_MISSIONS } from '../data/missionsData';
+import { ACHIEVEMENT_BADGES, checkAndUnlockAchievements } from '../data/achievementsData';
 import { sounds } from '../utils/audio';
 import { LEVELS } from '../data/gameData';
 import confetti from 'canvas-confetti';
@@ -16,6 +17,32 @@ export interface GrowthEvent {
   newLevel: number;
   levelConfig: LevelConfig;
 }
+
+const SEASONAL_WEATHER_CYCLES: ('sunny' | 'rainy' | 'snowy')[] = ['sunny', 'rainy', 'snowy'];
+
+const SEASONAL_QUOTES: Record<'sunny' | 'rainy' | 'snowy', string[]> = {
+  sunny: [
+    '“Such warm golden sunshine! Makes me want to bounce across the meadow all day! ☀️”',
+    '“My jelly surface feels warm like fresh honey toast! Let’s play! 🍯”',
+    '“The sunbeams found my favorite nap spot! It feels so deliciously toasty! ✨”',
+    '“Summer breeze is singing! Do you want to toss a toy ball with me? 🎾”',
+    '“Sun-kissed and sparkling! Sunny days make my smile extra bright! ☀️”',
+  ],
+  rainy: [
+    '“Pitter-patter raindrops... perfect for a warm cup of cocoa and cozy cuddles! 🌧️”',
+    '“Listen to the raindrops on our nursery window! It’s nature’s lullaby... 💧”',
+    '“I put on my favorite warm socks! Rain makes dumplings taste twice as yummy! 🍵”',
+    '“Splish, splash! If I had tiny froggy boots, I’d jump right in the puddles! 🐸”',
+    '“A cozy rainy afternoon! Tuck me in close for sweet marshmallow dreams! 🌧️💤”',
+  ],
+  snowy: [
+    '“Ooh snowflakes are dancing outside! Let’s build a tiny marshmallow snowman! ❄️”',
+    '“Brrr, it’s frosty cold outside! Tuck me close for sweet warm snuggles! ⛄”',
+    '“Look, soft white snow is falling! Everything outside looks like powdered sugar! 🍡”',
+    '“Winter days are so peaceful! Can we wrap up in a warm fluffy blanket together? 🧣”',
+    '“Catch a dancing snowflake on your nose! Winter magic is everywhere! ❄️✨”',
+  ],
+};
 
 /**
  * Hook to manage lively emotional expressions and temporary visual classes
@@ -447,6 +474,8 @@ interface HomeTabProps {
   growthEvent?: GrowthEvent | null;
   onFinishGrowthEvent?: (config: LevelConfig) => void;
   onNavigateTab?: (tab: 'home' | 'feed' | 'shop' | 'explore' | 'friends') => void;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
 }
 
 export const HomeTab: React.FC<HomeTabProps> = ({
@@ -456,59 +485,110 @@ export const HomeTab: React.FC<HomeTabProps> = ({
   growthEvent,
   onFinishGrowthEvent,
   onNavigateTab,
+  isMuted = sounds.isMuted,
+  onToggleMute,
 }) => {
   const [isSleeping, setIsSleeping] = useState(false);
   const [activeSpeech, setActiveSpeech] = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [pettingStreak, setPettingStreak] = useState(0);
   const [manualGrowthActive, setManualGrowthActive] = useState(false);
-  const [weather, setWeather] = useState<SimulatedWeather>('sunshine');
+  const [weather, setWeather] = useState<SimulatedWeather>('sunny');
   const [showJournalModal, setShowJournalModal] = useState(false);
 
-  // Real-time simulated weather cycle
+  // Dynamic seasonal weather cycle (cycles every 3 hours)
   useEffect(() => {
-    // Determine initial weather based on current local minutes
-    const currentMin = new Date().getMinutes();
-    const weatherCycle: SimulatedWeather[] = ['sunshine', 'petals', 'rain', 'rainbow'];
-    const initialIndex = Math.floor(currentMin / 15) % weatherCycle.length;
-    setWeather(weatherCycle[initialIndex]);
+    const currentHour = new Date().getHours();
+    const cycleIndex = Math.floor(currentHour / 3) % SEASONAL_WEATHER_CYCLES.length;
+    const initialWeather = SEASONAL_WEATHER_CYCLES[cycleIndex];
+    setWeather(initialWeather);
 
-    // Simulated dynamic weather shift every 75 seconds for a living, breathing world
-    const interval = setInterval(() => {
-      setWeather((prev) => {
-        const nextIndex = (weatherCycle.indexOf(prev) + 1) % weatherCycle.length;
-        return weatherCycle[nextIndex];
+    // Track seen weather in lifetime stats for achievements
+    const currentSeen = new Set(gameState.lifetimeStats?.seenWeathers || []);
+    if (!currentSeen.has(initialWeather)) {
+      currentSeen.add(initialWeather);
+      onUpdateState({
+        lifetimeStats: {
+          ...(gameState.lifetimeStats || { totalFeeds: 12, totalPets: 20, totalPlays: 10, totalExplores: 4, totalNaps: 5 }),
+          seenWeathers: Array.from(currentSeen),
+        },
       });
-    }, 75000);
+    }
+
+    // Dynamic weather interval checker every 60 seconds
+    const interval = setInterval(() => {
+      const nowHour = new Date().getHours();
+      const nextIndex = Math.floor(nowHour / 3) % SEASONAL_WEATHER_CYCLES.length;
+      const calcWeather = SEASONAL_WEATHER_CYCLES[nextIndex];
+      setWeather((prev) => {
+        if (prev !== calcWeather) {
+          // Seasonal shift event!
+          const quotes = SEASONAL_QUOTES[calcWeather];
+          setActiveSpeech(quotes[Math.floor(Math.random() * quotes.length)]);
+          setTimeout(() => setActiveSpeech(null), 4000);
+          return calcWeather;
+        }
+        return prev;
+      });
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
-  const handleCycleWeather = () => {
-    const cycle: SimulatedWeather[] = ['sunshine', 'petals', 'rain', 'rainbow'];
-    const nextIndex = (cycle.indexOf(weather) + 1) % cycle.length;
-    const nextWeather = cycle[nextIndex];
+  const handleCycleWeather = (forcedWeather?: 'sunny' | 'rainy' | 'snowy') => {
+    let nextWeather: 'sunny' | 'rainy' | 'snowy';
+    if (forcedWeather) {
+      nextWeather = forcedWeather;
+    } else {
+      const curIndex = SEASONAL_WEATHER_CYCLES.indexOf(weather as any);
+      const nextIndex = curIndex === -1 ? 0 : (curIndex + 1) % SEASONAL_WEATHER_CYCLES.length;
+      nextWeather = SEASONAL_WEATHER_CYCLES[nextIndex];
+    }
     setWeather(nextWeather);
 
-    // Weather audio and speech reactions
-    if (nextWeather === 'rain') {
-      sounds.playRaindrop();
-      setActiveSpeech(
-        gameState.equippedOutfit === 'outfit_froggy_raincoat'
-          ? '“Pitter-patter! Glad I have my Froggy Raincoat on for the cozy raindrops! 🌧️🐸”'
-          : '“Pitter-patter! Cozy raindrops are drumming outside! 🌧️”'
-      );
-    } else if (nextWeather === 'petals') {
-      sounds.playPetalBreeze();
-      setActiveSpeech('“A sweet cherry blossom petal just floated right onto my top-knot! 🌸”');
-    } else if (nextWeather === 'sunshine') {
+    // Seasonal audio feedback
+    if (nextWeather === 'sunny') {
       sounds.playSunshineChime();
-      setActiveSpeech('“Warm golden sunshine! My jelly surface is glowing like a gem! ☀️”');
-    } else if (nextWeather === 'rainbow') {
+    } else if (nextWeather === 'rainy') {
+      sounds.playRaindrop();
+    } else if (nextWeather === 'snowy') {
       sounds.playChime();
-      setActiveSpeech('“Look at the nursery sky! A double rainbow of sweet stardust! 🌈✨”');
     }
+
+    // Seasonal dialogue reaction
+    const quotes = SEASONAL_QUOTES[nextWeather];
+    setActiveSpeech(quotes[Math.floor(Math.random() * quotes.length)]);
     setTimeout(() => setActiveSpeech(null), 3500);
+
+    // Track seen weather for Season Wanderer achievement badge
+    const currentSeen = new Set(gameState.lifetimeStats?.seenWeathers || []);
+    if (!currentSeen.has(nextWeather)) {
+      currentSeen.add(nextWeather);
+      const updatedStats = {
+        ...(gameState.lifetimeStats || { totalFeeds: 12, totalPets: 20, totalPlays: 10, totalExplores: 4, totalNaps: 5 }),
+        seenWeathers: Array.from(currentSeen),
+      };
+      const nextState: GameState = {
+        ...gameState,
+        lifetimeStats: updatedStats,
+      };
+      const { updatedUnlocked, newlyUnlocked } = checkAndUnlockAchievements(nextState);
+      if (newlyUnlocked.length > 0) {
+        nextState.unlockedBadgeIds = updatedUnlocked;
+        confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
+      }
+      onUpdateState(nextState);
+    }
+  };
+
+  // Seasonal Talk / Chat Trigger
+  const handleTriggerSeasonalChat = () => {
+    sounds.playTap();
+    triggerAffection();
+    const curWeatherKey = (weather === 'snowy' ? 'snowy' : weather === 'rain' || weather === 'rainy' ? 'rainy' : 'sunny') as 'sunny' | 'rainy' | 'snowy';
+    const quotes = SEASONAL_QUOTES[curWeatherKey] || SEASONAL_QUOTES.sunny;
+    setActiveSpeech(quotes[Math.floor(Math.random() * quotes.length)]);
+    setTimeout(() => setActiveSpeech(null), 4000);
   };
 
   // Hook for natural, living emotional expressions & reactions during idle state
@@ -546,11 +626,36 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       sounds.playCoin();
     }
 
-    onUpdateState({
+    // Lifetime stats tracking for pet milestone
+    const currentStats = gameState.lifetimeStats || {
+      totalFeeds: 12,
+      totalPets: 20,
+      totalPlays: 10,
+      totalExplores: 4,
+      totalNaps: 5,
+      seenWeathers: [weather as string],
+    };
+    const updatedStats = {
+      ...currentStats,
+      totalPets: (currentStats.totalPets || 0) + 1,
+    };
+
+    const nextState: GameState = {
+      ...gameState,
       happiness: newHappy,
       coins: newCoins,
       dailyMissions: updatedMissions,
-    });
+      lifetimeStats: updatedStats,
+    };
+
+    const { updatedUnlocked, newlyUnlocked } = checkAndUnlockAchievements(nextState);
+    if (newlyUnlocked.length > 0) {
+      nextState.unlockedBadgeIds = updatedUnlocked;
+      sounds.playChime();
+      confetti({ particleCount: 35, spread: 50, origin: { y: 0.6 } });
+    }
+
+    onUpdateState(nextState);
 
     const quotes = [
       '“Boiing! Squishy feels extra squishy and bouncy!”',
@@ -574,16 +679,30 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       1
     );
 
+    const currentStats = gameState.lifetimeStats || {
+      totalFeeds: 12,
+      totalPets: 20,
+      totalPlays: 10,
+      totalExplores: 4,
+      totalNaps: 5,
+      seenWeathers: [weather as string],
+    };
+
     if (!isSleeping) {
       sounds.playPet();
       setActiveSpeech('“Shhh... Squishy is taking a cozy marshmallow nap...”');
       // Nap recovery
       const newHappy = Math.min(100, gameState.happiness + 15);
       const newFullness = Math.max(20, gameState.fullness - 5);
+      const updatedStats = {
+        ...currentStats,
+        totalNaps: (currentStats.totalNaps || 0) + 1,
+      };
       onUpdateState({
         happiness: newHappy,
         fullness: newFullness,
         dailyMissions: updatedMissions,
+        lifetimeStats: updatedStats,
       });
     } else {
       setActiveSpeech('“Squishy woke up refreshed and full of vitality!”');
@@ -592,6 +711,117 @@ export const HomeTab: React.FC<HomeTabProps> = ({
       });
     }
     setTimeout(() => setActiveSpeech(null), 3000);
+  };
+
+  const handlePlayWithSquishy = () => {
+    sounds.playSquish();
+    triggerAffection();
+    sounds.playChime();
+
+    // Progress Play daily mission in real time
+    const { updatedMissions } = updateMissionCategoryProgress(
+      gameState.dailyMissions || DEFAULT_DAILY_MISSIONS,
+      'play',
+      1
+    );
+
+    const newHappy = Math.min(100, gameState.happiness + 8);
+    const newFullness = Math.max(15, gameState.fullness - 3);
+    const newCoins = gameState.coins + 3;
+
+    const currentStats = gameState.lifetimeStats || {
+      totalFeeds: 12,
+      totalPets: 20,
+      totalPlays: 10,
+      totalExplores: 4,
+      totalNaps: 5,
+      seenWeathers: [weather as string],
+    };
+    const updatedStats = {
+      ...currentStats,
+      totalPlays: (currentStats.totalPlays || 0) + 1,
+    };
+
+    const nextState: GameState = {
+      ...gameState,
+      happiness: newHappy,
+      fullness: newFullness,
+      coins: newCoins,
+      dailyMissions: updatedMissions,
+      lifetimeStats: updatedStats,
+    };
+
+    const { updatedUnlocked, newlyUnlocked } = checkAndUnlockAchievements(nextState);
+    if (newlyUnlocked.length > 0) {
+      nextState.unlockedBadgeIds = updatedUnlocked;
+      confetti({ particleCount: 35, spread: 50, origin: { y: 0.6 } });
+    }
+
+    onUpdateState(nextState);
+
+    const quotes = [
+      '“Boiiing! Squishy tossed the colorful rainbow ball! High bounce! 🎾✨”',
+      '“*Super jelly giggles!* Squishy loves playing toys with you! 🎈”',
+      '“Bounce, bounce, hop! Squishy’s playfulness is at peak level! 🌟”',
+      '“Squishy did a playful dumpling flip in the air! Wheeeee! 🎾”',
+    ];
+    setActiveSpeech(quotes[Math.floor(Math.random() * quotes.length)]);
+    setTimeout(() => setActiveSpeech(null), 3200);
+  };
+
+  const handleQuickFeedSquishy = () => {
+    sounds.playMunch();
+    triggerAffection();
+
+    // Progress Feed daily mission in real time
+    const { updatedMissions } = updateMissionCategoryProgress(
+      gameState.dailyMissions || DEFAULT_DAILY_MISSIONS,
+      'feed',
+      1
+    );
+
+    const newHappy = Math.min(100, gameState.happiness + 6);
+    const newFullness = Math.min(100, gameState.fullness + 18);
+    const newXp = gameState.xp + 25;
+
+    const currentStats = gameState.lifetimeStats || {
+      totalFeeds: 12,
+      totalPets: 20,
+      totalPlays: 10,
+      totalExplores: 4,
+      totalNaps: 5,
+      seenWeathers: [weather as string],
+    };
+    const updatedStats = {
+      ...currentStats,
+      totalFeeds: (currentStats.totalFeeds || 0) + 1,
+    };
+
+    const nextState: GameState = {
+      ...gameState,
+      happiness: newHappy,
+      fullness: newFullness,
+      xp: newXp,
+      dailyMissions: updatedMissions,
+      lifetimeStats: updatedStats,
+    };
+
+    const { updatedUnlocked, newlyUnlocked } = checkAndUnlockAchievements(nextState);
+    if (newlyUnlocked.length > 0) {
+      nextState.unlockedBadgeIds = updatedUnlocked;
+      sounds.playLevelUp();
+      confetti({ particleCount: 45, spread: 60, origin: { y: 0.6 } });
+    }
+
+    onUpdateState(nextState);
+
+    const quotes = [
+      '“*Nom nom!* Delicious sweet berry glaze treat! Squishy is beaming! 🍓”',
+      '“Squishy munched the sweet dumpling snack with pure bliss! 🍙✨”',
+      '“Mmm! Tastes like sweet strawberries and sunshine! +25 XP! 🧁”',
+    ];
+    setActiveSpeech(quotes[Math.floor(Math.random() * quotes.length)]);
+    setTimeout(() => setActiveSpeech(null), 3200);
   };
 
   const colors: { id: SquishyColor; label: string; hex: string; skinId: any }[] = [
@@ -794,6 +1024,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
     }
   }
 
+  const equippedBadge = ACHIEVEMENT_BADGES.find((b) => b.id === gameState.equippedBadgeId);
+
   return (
     <div
       className={`pb-32 max-w-md mx-auto px-4 pt-1 transition-colors duration-700 ${
@@ -863,30 +1095,31 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {/* Simulated Weather Condition Toggle Button */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Dynamic Seasonal Weather Station Pill */}
               <button
                 type="button"
-                onClick={handleCycleWeather}
-                className="px-2.5 py-1 rounded-full font-display font-bold text-xs flex items-center gap-1.5 border bg-white/90 text-stone-700 border-stone-200 hover:bg-stone-50 shadow-2xs cursor-pointer transition-all active:scale-95"
-                title="Simulated Real-Time Weather • Click to change atmosphere"
+                onClick={() => handleCycleWeather()}
+                className={`px-2.5 py-1 rounded-full font-display font-bold text-xs flex items-center gap-1.5 border shadow-2xs cursor-pointer transition-all active:scale-95 ${
+                  weather === 'snowy'
+                    ? 'bg-sky-50 text-sky-900 border-sky-300 ring-1 ring-sky-200'
+                    : weather === 'rain' || weather === 'rainy'
+                    ? 'bg-blue-50 text-blue-900 border-blue-300 ring-1 ring-blue-200'
+                    : 'bg-amber-50 text-amber-900 border-amber-300 ring-1 ring-amber-200'
+                }`}
+                title={`Seasonal Weather: ${weather} • Cycles every 3 hrs (next shift in ${3 - (new Date().getHours() % 3)}h) • Click to cycle weather`}
               >
                 <span>
-                  {weather === 'sunshine'
-                    ? '☀️'
-                    : weather === 'rain'
-                    ? '🌧️'
-                    : weather === 'petals'
-                    ? '🌸'
-                    : '🌈'}
+                  {weather === 'snowy' ? '❄️' : weather === 'rain' || weather === 'rainy' ? '🌧️' : '☀️'}
                 </span>
-                <span className="capitalize">{weather}</span>
+                <span className="capitalize">{weather === 'sunshine' ? 'Sunny' : weather === 'rain' ? 'Rainy' : weather}</span>
+                <span className="text-[9px] opacity-70 font-semibold">({3 - (new Date().getHours() % 3)}h)</span>
               </button>
 
               {/* Nap / Light Switch Button */}
               <button
                 onClick={handleToggleSleep}
-                className={`px-3 py-1 rounded-full font-display font-bold text-xs flex items-center gap-1.5 border transition-all ${
+                className={`px-3 py-1 rounded-full font-display font-bold text-xs flex items-center gap-1.5 border transition-all cursor-pointer ${
                   isSleeping
                     ? 'bg-amber-400 text-stone-900 border-amber-300 shadow-md scale-105'
                     : 'bg-white/90 text-stone-700 border-stone-200 hover:bg-stone-50'
@@ -1022,9 +1255,36 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               showPedestal={true}
             />
 
-            {/* Squish prompt pill */}
-            <div className="mt-2 text-xs font-display font-extrabold text-stone-600 bg-white/80 border border-stone-200 px-3.5 py-1 rounded-full shadow-2xs flex items-center gap-1.5">
-              <span>👆</span> Tap or poke Squishy to squish!
+            {/* Squish prompt pill and Chat prompt button */}
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap justify-center">
+              <button
+                type="button"
+                onClick={handleSquish}
+                className="text-xs font-display font-extrabold text-stone-600 bg-white/85 border border-stone-200 px-3.5 py-1 rounded-full shadow-2xs flex items-center gap-1.5 cursor-pointer hover:bg-white active:scale-95 transition-all"
+              >
+                <span>👆</span> Tap to squish!
+              </button>
+
+              {/* Seasonal Dialogue / Chat Prompt Button */}
+              <button
+                type="button"
+                onClick={handleTriggerSeasonalChat}
+                className="text-xs font-display font-extrabold text-indigo-900 bg-gradient-to-r from-amber-200 via-pink-200 to-purple-200 border border-purple-300/80 px-3 py-1 rounded-full shadow-2xs hover:shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                title="Hear Squishy's thoughts about the current weather and season!"
+              >
+                <span>💬</span> Season Talk
+              </button>
+
+              {/* Equipped Profile Badge */}
+              {equippedBadge && (
+                <div
+                  className="text-xs font-display font-black text-amber-900 bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-300 px-2.5 py-0.5 rounded-full shadow-2xs flex items-center gap-1 animate-fadeIn"
+                  title={`Equipped Profile Badge: ${equippedBadge.name}`}
+                >
+                  <span>{equippedBadge.icon}</span>
+                  <span className="text-[10px]">{equippedBadge.name}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1112,6 +1372,8 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         onUpdateState={onUpdateState}
         onNavigateTab={onNavigateTab}
         onPetSquishy={handleSquish}
+        onPlaySquishy={handlePlayWithSquishy}
+        onQuickFeed={handleQuickFeedSquishy}
         onNapToggle={handleToggleSleep}
         onMissionClaimed={(mission) => {
           triggerAffection();
@@ -1128,27 +1390,83 @@ export const HomeTab: React.FC<HomeTabProps> = ({
         onOpenJournal={() => setShowJournalModal(true)}
       />
 
-      {/* Quick Action Activity Cards */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      {/* Quick Action Activity Cards: Pet, Play, Snack, Explore */}
+      <div className="grid grid-cols-2 gap-2.5 mb-4">
         {/* Pet & Tickle */}
         <div
           onClick={handleSquish}
-          className="jelly-card rounded-2xl p-3 cursor-pointer hover:border-pink-300 transition-all flex flex-col justify-between"
+          className="jelly-card rounded-2xl p-3 cursor-pointer hover:border-pink-300 transition-all flex flex-col justify-between group active:scale-[0.98]"
         >
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xl">🪶</span>
+            <span className="text-2xl group-hover:scale-110 transition-transform">🪶</span>
             <div>
               <h4 className="font-display font-extrabold text-xs text-stone-900">
-                Tickle Belly
+                Tickle & Pet
               </h4>
-              <p className="text-[10px] text-stone-500 font-semibold">Giggles & joy boost</p>
+              <p className="text-[10px] text-stone-500 font-semibold">Purrs & giggles</p>
             </div>
           </div>
           <button
             type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSquish();
+            }}
             className="w-full mt-2 py-1 rounded-full btn-squish-primary font-display font-bold text-[11px] text-white cursor-pointer"
           >
-            Tickle!
+            Pet Now!
+          </button>
+        </div>
+
+        {/* Play with Toy */}
+        <div
+          onClick={handlePlayWithSquishy}
+          className="jelly-card rounded-2xl p-3 cursor-pointer hover:border-amber-300 transition-all flex flex-col justify-between group active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-2xl group-hover:scale-110 transition-transform">🎾</span>
+            <div>
+              <h4 className="font-display font-extrabold text-xs text-stone-900">
+                Play Bounce
+              </h4>
+              <p className="text-[10px] text-stone-500 font-semibold">Toss toys & ball</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePlayWithSquishy();
+            }}
+            className="w-full mt-2 py-1 rounded-full btn-squish-gold font-display font-bold text-[11px] text-stone-900 cursor-pointer"
+          >
+            Play Now!
+          </button>
+        </div>
+
+        {/* Quick Snack / Feed */}
+        <div
+          onClick={handleQuickFeedSquishy}
+          className="jelly-card rounded-2xl p-3 cursor-pointer hover:border-rose-300 transition-all flex flex-col justify-between group active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-2xl group-hover:scale-110 transition-transform">🍓</span>
+            <div>
+              <h4 className="font-display font-extrabold text-xs text-stone-900">
+                Quick Snack
+              </h4>
+              <p className="text-[10px] text-stone-500 font-semibold">Yummy treats (+25 XP)</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleQuickFeedSquishy();
+            }}
+            className="w-full mt-2 py-1 rounded-full btn-squish-primary font-display font-bold text-[11px] text-white cursor-pointer bg-gradient-to-r from-rose-500 to-pink-500"
+          >
+            Feed Snack!
           </button>
         </div>
 
@@ -1160,26 +1478,109 @@ export const HomeTab: React.FC<HomeTabProps> = ({
               onNavigateTab(gameState.level >= 4 ? 'explore' : 'feed');
             }
           }}
-          className="jelly-card rounded-2xl p-3 cursor-pointer hover:border-emerald-300 transition-all flex flex-col justify-between"
+          className="jelly-card rounded-2xl p-3 cursor-pointer hover:border-emerald-300 transition-all flex flex-col justify-between group active:scale-[0.98]"
         >
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xl">{gameState.level >= 4 ? '🌿' : '🍼'}</span>
+            <span className="text-2xl group-hover:scale-110 transition-transform">{gameState.level >= 4 ? '🌿' : '🍼'}</span>
             <div>
               <h4 className="font-display font-extrabold text-xs text-stone-900">
                 {gameState.level >= 4 ? 'Meadow Walk' : 'Treat Lab'}
               </h4>
               <p className="text-[10px] text-stone-500 font-semibold">
-                {gameState.level >= 4 ? 'Forage for coins' : 'Feed yummy snacks'}
+                {gameState.level >= 4 ? 'Forage for coins' : 'Gourmet menu'}
               </p>
             </div>
           </div>
           <button
             type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              sounds.playTap();
+              if (onNavigateTab) {
+                onNavigateTab(gameState.level >= 4 ? 'explore' : 'feed');
+              }
+            }}
             className="w-full mt-2 py-1 rounded-full btn-squish-cyan font-display font-bold text-[11px] text-stone-900 cursor-pointer"
           >
-            {gameState.level >= 4 ? 'Explore ➔' : 'Feed ➔'}
+            {gameState.level >= 4 ? 'Explore ➔' : 'Feed Lab ➔'}
           </button>
         </div>
+      </div>
+
+      {/* Game Settings & Sound Effects Toggle Card */}
+      <div className="jelly-card rounded-2xl p-4 border border-rose-200/80 bg-white/95 shadow-xs mb-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl shrink-0 transition-colors ${
+              !isMuted ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-400'
+            }`}>
+              {!isMuted ? '🔊' : '🔇'}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="font-display font-extrabold text-xs text-stone-900">
+                  Game Sound Effects
+                </h4>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                  !isMuted
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : 'bg-stone-100 text-stone-500 border-stone-300'
+                }`}>
+                  {!isMuted ? 'ON' : 'OFF'}
+                </span>
+              </div>
+              <p className="text-[10.5px] text-stone-500 font-semibold mt-0.5 truncate">
+                {!isMuted
+                  ? 'Playing squishy pops, munches, & chimes'
+                  : 'All sound effects and audio are silenced'}
+              </p>
+            </div>
+          </div>
+
+          {/* Simple Toggle Switch */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!isMuted}
+            onClick={() => {
+              if (onToggleMute) {
+                onToggleMute();
+              } else {
+                sounds.toggleMute();
+              }
+            }}
+            className={`w-13 h-7 flex items-center rounded-full p-1 transition-colors duration-300 cursor-pointer shadow-inner shrink-0 ${
+              !isMuted ? 'bg-emerald-500' : 'bg-stone-300'
+            }`}
+            title={!isMuted ? 'Turn Sound Effects OFF' : 'Turn Sound Effects ON'}
+            aria-label="Toggle game sound effects"
+          >
+            <div
+              className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-300 ${
+                !isMuted ? 'translate-x-6' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Quick Test Sound button */}
+        {!isMuted && (
+          <div className="mt-3 pt-2.5 border-t border-stone-100 flex items-center justify-between">
+            <span className="text-[10.5px] text-stone-400 font-medium">
+              Want to check audio volume?
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playSquish();
+                setTimeout(() => sounds.playChime(), 150);
+              }}
+              className="px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-700 text-[10px] font-display font-extrabold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+            >
+              <span>🎵</span> Test Sound
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Squishy Bond & Stats Card */}

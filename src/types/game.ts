@@ -75,7 +75,7 @@ export interface DailyStreakReward {
   isSpecial?: boolean;
 }
 
-export type MissionCategory = 'pet' | 'feed' | 'explore' | 'sleep' | 'personality';
+export type MissionCategory = 'pet' | 'feed' | 'explore' | 'sleep' | 'personality' | 'play';
 
 export interface DailyMission {
   id: string;
@@ -209,4 +209,30 @@ export interface GameState {
   dailyMissionsBonusClaimed?: boolean;
 
   journalEntries?: JournalEntry[];
+  soundEnabled?: boolean;
+  xpHistory?: { day: string; date: string; fullDate: string; xp: number; xpGained: number }[];
+
+  // Lifetime achievements & profile badges
+  lifetimeStats?: {
+    totalFeeds: number;
+    totalPets: number;
+    totalPlays: number;
+    totalExplores: number;
+    totalNaps: number;
+    seenWeathers?: string[]; // 'sunny', 'rainy', 'snowy'
+  };
+  unlockedBadgeIds?: string[];
+  equippedBadgeId?: string | null;
+}
+
+export interface AchievementBadge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  category: 'feed' | 'level' | 'pet' | 'streak' | 'explore' | 'journal' | 'weather' | 'comfort';
+  target: number;
+  rewardCoins: number;
+  rewardGems: number;
+  tier: 'bronze' | 'silver' | 'gold' | 'celestial';
 }

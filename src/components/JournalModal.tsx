@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { GameState, JournalEntry, JournalCategory } from '../types/game';
 import { generateDailyStorySummary, addJournalEntry } from '../data/journalData';
 import { getTodayDateString, getYesterdayDateString } from '../data/streakData';
+import { AchievementsSection } from './AchievementsSection';
 import { sounds } from '../utils/audio';
 
 interface JournalModalProps {
@@ -17,6 +18,7 @@ export const JournalModal: React.FC<JournalModalProps> = ({
   gameState,
   onUpdateState,
 }) => {
+  const [modalTab, setModalTab] = useState<'memories' | 'achievements'>('memories');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'milestones' | 'explore' | 'streaks'>('all');
   const [customNote, setCustomNote] = useState('');
   const [showAddNote, setShowAddNote] = useState(false);
@@ -102,14 +104,16 @@ export const JournalModal: React.FC<JournalModalProps> = ({
         <div className="p-4 border-b border-amber-200/80 bg-white/70 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center text-xl shadow-xs">
-              <span>📖</span>
+              <span>{modalTab === 'memories' ? '📖' : '🏆'}</span>
             </div>
             <div>
               <h3 className="font-display font-black text-stone-900 text-sm flex items-center gap-1.5">
-                Squishy’s Memory Journal
+                {modalTab === 'memories' ? 'Squishy’s Memory Journal' : 'Lifetime Milestones & Badges'}
               </h3>
               <p className="text-[11px] text-stone-500 font-semibold">
-                Auto-logged daily milestones & adventures
+                {modalTab === 'memories'
+                  ? 'Auto-logged daily milestones & adventures'
+                  : 'Earn unique profile badges by hitting milestones'}
               </p>
             </div>
           </div>
@@ -120,35 +124,77 @@ export const JournalModal: React.FC<JournalModalProps> = ({
               sounds.playTap();
               onClose();
             }}
-            className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold text-sm transition-all"
+            className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold text-sm transition-all cursor-pointer"
             aria-label="Close Journal"
           >
             ✕
           </button>
         </div>
 
-        {/* Date Selector Navigation Bar */}
-        <div className="px-4 py-2 bg-amber-50/80 border-b border-amber-200/50 flex items-center gap-2 overflow-x-auto scrollbar-none">
-          {groupedDates.map(([dStr, dEntries]) => (
-            <button
-              key={dStr}
-              type="button"
-              onClick={() => {
-                sounds.playTap();
-                setActiveDate(dStr);
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-display font-extrabold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                activeDate === dStr
-                  ? 'bg-amber-400 text-stone-900 shadow-xs scale-102 border border-amber-500'
-                  : 'bg-white/80 text-stone-600 hover:bg-white border border-stone-200/80'
-              }`}
-            >
-              <span>📅</span>
-              <span>{getDayDisplayName(dStr)}</span>
-              <span className="text-[10px] opacity-75">({dEntries.length})</span>
-            </button>
-          ))}
+        {/* Modal Primary Tab Navigation: Memories vs Achievements */}
+        <div className="flex items-center justify-center gap-1 px-4 py-2 bg-amber-100/60 border-b border-amber-200">
+          <button
+            type="button"
+            onClick={() => {
+              sounds.playTap();
+              setModalTab('memories');
+            }}
+            className={`flex-1 py-1 rounded-xl font-display font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              modalTab === 'memories'
+                ? 'bg-white text-stone-900 shadow-2xs border border-amber-300'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <span>📖</span> Memories ({entries.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              sounds.playTap();
+              setModalTab('achievements');
+            }}
+            className={`flex-1 py-1 rounded-xl font-display font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              modalTab === 'achievements'
+                ? 'bg-white text-amber-900 shadow-2xs border border-amber-300'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <span>🏆</span> Milestones & Badges
+          </button>
         </div>
+
+        {modalTab === 'achievements' ? (
+          <div className="p-4 overflow-y-auto flex-1 animate-fadeIn">
+            <AchievementsSection
+              gameState={gameState}
+              onUpdateState={onUpdateState}
+              compact={true}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Date Selector Navigation Bar */}
+            <div className="px-4 py-2 bg-amber-50/80 border-b border-amber-200/50 flex items-center gap-2 overflow-x-auto scrollbar-none">
+              {groupedDates.map(([dStr, dEntries]) => (
+                <button
+                  key={dStr}
+                  type="button"
+                  onClick={() => {
+                    sounds.playTap();
+                    setActiveDate(dStr);
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-display font-extrabold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeDate === dStr
+                      ? 'bg-amber-400 text-stone-900 shadow-xs scale-102 border border-amber-500'
+                      : 'bg-white/80 text-stone-600 hover:bg-white border border-stone-200/80'
+                  }`}
+                >
+                  <span>📅</span>
+                  <span>{getDayDisplayName(dStr)}</span>
+                  <span className="text-[10px] opacity-75">({dEntries.length})</span>
+                </button>
+              ))}
+            </div>
 
         {/* Content Body */}
         <div className="p-4 overflow-y-auto space-y-3.5 flex-1">
@@ -198,28 +244,57 @@ export const JournalModal: React.FC<JournalModalProps> = ({
 
           {/* Add Custom Note Drawer */}
           {showAddNote && (
-            <form onSubmit={handleAddCustomNote} className="p-3 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-2 animate-fadeIn">
+            <form onSubmit={handleAddCustomNote} className="p-3 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-2.5 animate-fadeIn">
               <label className="text-xs font-display font-bold text-stone-800 block">
                 Write a memory for Squishy:
               </label>
+
+              {/* Inspiration Prompts Chips */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-extrabold text-stone-400 uppercase tracking-wider block">
+                  💡 Inspiration Prompts (tap to fill):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    '✨ Squishy giggled so sweetly today when...',
+                    '🍓 Squishy’s favorite treat was definitely...',
+                    '🧭 We had a wonderful expedition together in...',
+                    '💤 Squishy took the coziest nap after...',
+                    '💖 The thing I adore most about Squishy is...',
+                  ].map((promptText, pIdx) => (
+                    <button
+                      key={pIdx}
+                      type="button"
+                      onClick={() => {
+                        sounds.playTap();
+                        setCustomNote(promptText);
+                      }}
+                      className="text-[10px] font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full transition-all active:scale-95 cursor-pointer text-left"
+                    >
+                      {promptText}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <textarea
                 value={customNote}
                 onChange={(e) => setCustomNote(e.target.value)}
                 placeholder="e.g. Squishy made the sweetest squeak today while wearing the beret!"
                 rows={2}
-                className="w-full text-xs p-2 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                className="w-full text-xs p-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-rose-300"
               />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddNote(false)}
-                  className="px-2.5 py-1 text-xs font-bold text-stone-500 hover:text-stone-700"
+                  className="px-2.5 py-1 text-xs font-bold text-stone-500 hover:text-stone-700 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1 text-xs font-display font-bold bg-rose-500 text-white rounded-full hover:bg-rose-600 shadow-xs"
+                  className="px-3 py-1 text-xs font-display font-bold bg-rose-500 text-white rounded-full hover:bg-rose-600 shadow-xs cursor-pointer active:scale-95"
                 >
                   Save to Journal
                 </button>
@@ -281,8 +356,10 @@ export const JournalModal: React.FC<JournalModalProps> = ({
             </div>
           )}
         </div>
+      </>
+      )}
 
-        {/* Modal Footer */}
+      {/* Modal Footer */}
         <div className="p-3 bg-white/80 border-t border-amber-200 flex items-center justify-between text-xs text-stone-500 font-semibold">
           <span>Total Memories: {entries.length}</span>
           <button

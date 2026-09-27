@@ -29,6 +29,19 @@ export const DEFAULT_DAILY_MISSIONS: DailyMission[] = [
     claimed: false,
   },
   {
+    id: 'mission_play_squishy',
+    title: 'Play with Squishy 2 times',
+    description: 'Bounce toys or toss the colorful ball with Squishy to spark playful giggles.',
+    icon: '🎾',
+    category: 'play',
+    target: 2,
+    current: 0,
+    rewardCoins: 160,
+    rewardGems: 5,
+    completed: false,
+    claimed: false,
+  },
+  {
     id: 'mission_find_item_explore',
     title: 'Find 1 item in Explore',
     description: 'Venture into the meadow or sunlit forest to forage shiny collectibles.',
@@ -61,10 +74,17 @@ export function getInitialOrRefreshedMissions(
 ): { missions: DailyMission[]; date: string; bonusClaimed: boolean } {
   const today = getTodayDateString();
 
-  // If today's missions already exist, maintain them
+  // If today's missions already exist, maintain them and merge any newly added default missions
   if (existingMissions && existingMissions.length > 0 && lastDate === today) {
+    const existingIds = new Set(existingMissions.map((m) => m.id));
+    const merged = [...existingMissions];
+    for (const def of DEFAULT_DAILY_MISSIONS) {
+      if (!existingIds.has(def.id)) {
+        merged.push({ ...def });
+      }
+    }
     return {
-      missions: existingMissions,
+      missions: merged,
       date: today,
       bonusClaimed: false,
     };

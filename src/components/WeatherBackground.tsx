@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type SimulatedWeather = 'sunshine' | 'rain' | 'petals' | 'rainbow';
+export type SimulatedWeather = 'sunny' | 'rainy' | 'snowy' | 'sunshine' | 'rain' | 'petals' | 'rainbow';
 
 interface WeatherBackgroundProps {
   weather: SimulatedWeather;
@@ -8,6 +8,22 @@ interface WeatherBackgroundProps {
 }
 
 export const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weather, isSleeping }) => {
+  // Pre-configured deterministic snowflakes for winter conditions
+  const snowflakes = [
+    { id: 1, left: '6%', delay: '0s', duration: '3.6s', size: 14, icon: '❄️' },
+    { id: 2, left: '14%', delay: '1.2s', duration: '4.2s', size: 12, icon: '❅' },
+    { id: 3, left: '22%', delay: '2.0s', duration: '3.8s', size: 16, icon: '❄️' },
+    { id: 4, left: '32%', delay: '0.6s', duration: '4.5s', size: 13, icon: '❅' },
+    { id: 5, left: '44%', delay: '2.5s', duration: '3.5s', size: 15, icon: '❄️' },
+    { id: 6, left: '54%', delay: '1.5s', duration: '4.0s', size: 11, icon: '❅' },
+    { id: 7, left: '62%', delay: '0.3s', duration: '4.8s', size: 14, icon: '❄️' },
+    { id: 8, left: '74%', delay: '1.8s', duration: '3.7s', size: 12, icon: '❅' },
+    { id: 9, left: '84%', delay: '2.8s', duration: '4.3s', size: 16, icon: '❄️' },
+    { id: 10, left: '92%', delay: '0.9s', duration: '3.9s', size: 11, icon: '❅' },
+    { id: 11, left: '18%', delay: '3.1s', duration: '4.1s', size: 15, icon: '❄️' },
+    { id: 12, left: '68%', delay: '3.4s', duration: '4.4s', size: 13, icon: '❅' },
+  ];
+
   // Pre-configured deterministic raindrops for steady performance
   const raindrops = [
     { id: 1, left: '4%', delay: '0.1s', duration: '0.9s', height: 22 },
@@ -69,9 +85,9 @@ export const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weather, i
       }`}
     >
       {/* ========================================================
-          SUNSHINE WEATHER: Radiant Golden Rays & Floating Motes
+          SUNSHINE / SUNNY WEATHER: Radiant Golden Rays & Floating Motes
       ======================================================== */}
-      {weather === 'sunshine' && (
+      {(weather === 'sunshine' || weather === 'sunny') && (
         <div className="absolute inset-0 animate-fadeIn">
           {/* Warm Golden Atmosphere Gradient */}
           <div
@@ -136,9 +152,9 @@ export const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weather, i
       )}
 
       {/* ========================================================
-          RAIN WEATHER: Cozy Diagonal Drops & Water Puddle Ripples
+          RAIN / RAINY WEATHER: Cozy Diagonal Drops & Water Puddle Ripples
       ======================================================== */}
-      {weather === 'rain' && (
+      {(weather === 'rain' || weather === 'rainy') && (
         <div className="absolute inset-0 animate-fadeIn">
           {/* Cool Cozy Rain Atmosphere Tint */}
           <div
@@ -309,6 +325,61 @@ export const WeatherBackground: React.FC<WeatherBackgroundProps> = ({ weather, i
           >
             🌈
           </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          SNOWY WEATHER: Falling Winter Snowflakes & Frost Shimmer
+      ======================================================== */}
+      {weather === 'snowy' && (
+        <div className="absolute inset-0 animate-fadeIn pointer-events-none">
+          {/* Crisp Winter Chill Atmosphere Gradient */}
+          <div
+            className="absolute inset-0 transition-all duration-1000"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(224, 242, 254, 0.35) 0%, rgba(219, 234, 254, 0.15) 50%, rgba(248, 250, 252, 0.25) 100%)',
+            }}
+          />
+
+          {/* Falling Snowflakes */}
+          {snowflakes.map((s) => (
+            <div
+              key={s.id}
+              className="absolute animate-weather-snow pointer-events-none select-none"
+              style={{
+                left: s.left,
+                top: '-25px',
+                fontSize: `${s.size}px`,
+                animationDelay: s.delay,
+                animationDuration: s.duration,
+                color: '#ffffff',
+                textShadow: '0 0 6px rgba(186, 230, 253, 0.9), 0 0 12px rgba(125, 211, 252, 0.6)',
+              }}
+            >
+              {s.icon}
+            </div>
+          ))}
+
+          {/* Frost Sparkle Crystals */}
+          <div className="absolute top-2 left-4 text-sky-200 text-sm animate-sparkle">
+            ❄️
+          </div>
+          <div
+            className="absolute top-4 right-6 text-sky-100 text-xs animate-sparkle"
+            style={{ animationDelay: '1.2s' }}
+          >
+            ✨
+          </div>
+          <div
+            className="absolute bottom-6 left-6 text-sky-200 text-xs animate-sparkle"
+            style={{ animationDelay: '2.1s' }}
+          >
+            ❅
+          </div>
+
+          {/* Soft Frosty Drift at bottom */}
+          <div className="absolute bottom-0 inset-x-0 h-6 bg-gradient-to-t from-sky-100/30 to-transparent pointer-events-none" />
         </div>
       )}
     </div>

@@ -4,6 +4,9 @@ import { EXPLORATION_ZONES } from '../data/gameData';
 import { sounds } from '../utils/audio';
 import { updateMissionCategoryProgress, DEFAULT_DAILY_MISSIONS } from '../data/missionsData';
 import { addJournalEntry, INITIAL_JOURNAL_ENTRIES } from '../data/journalData';
+import { XpProgressChart } from './XpProgressChart';
+import { AchievementsSection } from './AchievementsSection';
+import { checkAndUnlockAchievements } from '../data/achievementsData';
 import confetti from 'canvas-confetti';
 
 interface ExploreTabProps {
@@ -16,6 +19,7 @@ export const ExploreTab: React.FC<ExploreTabProps> = ({
   gameState,
   onUpdateState,
 }) => {
+  const [subView, setSubView] = useState<'expeditions' | 'achievements'>('expeditions');
   const [selectedZone, setSelectedZone] = useState(EXPLORATION_ZONES[0]);
   const [forageResult, setForageResult] = useState<string | null>(null);
   const [adventureStep, setAdventureStep] = useState(gameState.adventurePartsCollected || 0);
@@ -52,13 +56,40 @@ export const ExploreTab: React.FC<ExploreTabProps> = ({
       true
     );
 
-    onUpdateState({
+    const currentStats = gameState.lifetimeStats || {
+      totalFeeds: 12,
+      totalPets: 20,
+      totalPlays: 10,
+      totalExplores: 4,
+      totalNaps: 5,
+      seenWeathers: ['sunny'],
+    };
+    const updatedStats = {
+      ...currentStats,
+      totalExplores: (currentStats.totalExplores || 0) + 1,
+    };
+
+    const nextState: GameState = {
+      ...gameState,
       coins: newCoins,
       xp: newXp,
       happiness: newHappy,
       dailyMissions: updatedMissions,
       journalEntries: updatedJournal,
-    });
+      lifetimeStats: updatedStats,
+    };
+
+    const { updatedUnlocked, newlyUnlocked } = checkAndUnlockAchievements(nextState);
+    if (newlyUnlocked.length > 0) {
+      nextState.unlockedBadgeIds = updatedUnlocked;
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 },
+      });
+    }
+
+    onUpdateState(nextState);
 
     setForageResult(`Found a ${item}! +${gainedCoins} Coins, +${gainedXp} XP!`);
     setTimeout(() => setForageResult(null), 3000);
@@ -121,6 +152,54 @@ export const ExploreTab: React.FC<ExploreTabProps> = ({
           Take Squishy on scenic foraging walks and expeditions
         </p>
       </div>
+
+      {/* View Switcher: Expeditions vs Lifetime Achievements */}
+      <div className="flex items-center justify-center gap-1.5 mb-4 bg-stone-100/90 p-1 rounded-2xl border border-stone-200 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => {
+            sounds.playTap();
+            setSubView('expeditions');
+          }}
+          className={`flex-1 py-1.5 rounded-xl font-display font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            subView === 'expeditions'
+              ? 'bg-white text-stone-900 shadow-xs'
+              : 'text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          <span>🧭</span> Expeditions & Biomes
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            sounds.playTap();
+            setSubView('achievements');
+          }}
+          className={`flex-1 py-1.5 rounded-xl font-display font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            subView === 'achievements'
+              ? 'bg-white text-amber-900 shadow-xs'
+              : 'text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          <span>🏆</span> Lifetime Achievements
+        </button>
+      </div>
+
+      {subView === 'achievements' ? (
+        <div className="animate-fadeIn">
+          <AchievementsSection
+            gameState={gameState}
+            onUpdateState={onUpdateState}
+          />
+        </div>
+      ) : (
+        <>
+          {/* 7-Day XP Growth Tracker Progress Chart (Recharts) */}
+          <XpProgressChart
+            currentXp={gameState.xp}
+            level={gameState.level}
+            savedHistory={gameState.xpHistory}
+          />
 
       {/* Level 10 Major Adventure Banner */}
       <div className="jelly-pod rounded-3xl p-4 mb-4 border-2 border-purple-200/80 bg-gradient-to-r from-purple-100/80 via-pink-100/70 to-amber-100/70 relative overflow-hidden shadow-md">
@@ -284,6 +363,8 @@ export const ExploreTab: React.FC<ExploreTabProps> = ({
           <span>Forage for Hidden Treats & Coins!</span>
         </button>
       </div>
+    </>
+  )}
 
       {/* ADVENTURE CHEST MODAL */}
       {showChestModal && (

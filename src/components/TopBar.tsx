@@ -1,5 +1,6 @@
 import React from 'react';
 import { sounds } from '../utils/audio';
+import { ACHIEVEMENT_BADGES } from '../data/achievementsData';
 
 interface TopBarProps {
   level: number;
@@ -11,6 +12,7 @@ interface TopBarProps {
   onClaimFreeGift?: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  equippedBadgeId?: string | null;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -22,7 +24,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   onClaimFreeGift,
   isMuted,
   onToggleMute,
+  equippedBadgeId,
 }) => {
+  const equippedBadge = ACHIEVEMENT_BADGES.find((b) => b.id === equippedBadgeId);
+
   return (
     <header className="sticky top-0 z-30 px-3 pt-2 pb-2 bg-[#fbf9f4]/95 backdrop-blur-md border-b border-rose-100/60 transition-all">
       <div className="flex items-center justify-between gap-1.5 max-w-md mx-auto">
@@ -38,6 +43,16 @@ export const TopBar: React.FC<TopBarProps> = ({
               Lv. {level}
             </span>
           </div>
+
+          {equippedBadge && (
+            <div
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-200 to-yellow-100 border border-amber-300 text-stone-900 shadow-2xs font-display font-black text-xs animate-fadeIn cursor-pointer"
+              title={`Equipped Profile Badge: ${equippedBadge.name}`}
+            >
+              <span>{equippedBadge.icon}</span>
+              <span className="text-[10px] hidden sm:inline">{equippedBadge.name}</span>
+            </div>
+          )}
         </div>
 
         {/* Center: Currencies (Coins & Gems) */}

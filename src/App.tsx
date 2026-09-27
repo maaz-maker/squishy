@@ -25,6 +25,7 @@ import {
   updateMissionCategoryProgress,
 } from './data/missionsData';
 import { INITIAL_JOURNAL_ENTRIES, addJournalEntry } from './data/journalData';
+import { checkAndUnlockAchievements } from './data/achievementsData';
 import confetti from 'canvas-confetti';
 
 const STORAGE_KEY = 'squishy_game_save_v1';
@@ -89,6 +90,18 @@ const INITIAL_STATE: GameState = {
   dailyMissionsBonusClaimed: false,
 
   journalEntries: INITIAL_JOURNAL_ENTRIES,
+  soundEnabled: true,
+
+  lifetimeStats: {
+    totalFeeds: 14,
+    totalPets: 22,
+    totalPlays: 12,
+    totalExplores: 6,
+    totalNaps: 5,
+    seenWeathers: ['sunny'],
+  },
+  unlockedBadgeIds: ['badge_feed_10'],
+  equippedBadgeId: 'badge_feed_10',
 };
 
 export default function App() {
@@ -97,6 +110,9 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (parsed.soundEnabled !== undefined) {
+          sounds.setMuted(!parsed.soundEnabled);
+        }
         const refreshed = getInitialOrRefreshedMissions(
           parsed.dailyMissions,
           parsed.dailyMissionsDate
@@ -211,16 +227,39 @@ export default function App() {
       }
     }
 
-    setGameState((prev) => ({
-      ...prev,
-      xp: newXp,
-      happiness: newHappy,
-      fullness: newFullness,
-      coins: newCoins,
-      gems: newGems,
-      lastFedTime: Date.now(),
-      dailyMissions: updatedMissions,
-    }));
+    const currentStats = gameState.lifetimeStats || {
+      totalFeeds: 14,
+      totalPets: 22,
+      totalPlays: 12,
+      totalExplores: 6,
+      totalNaps: 5,
+      seenWeathers: ['sunny'],
+    };
+    const updatedStats = {
+      ...currentStats,
+      totalFeeds: (currentStats.totalFeeds || 0) + 1,
+    };
+
+    setGameState((prev) => {
+      const nextState = {
+        ...prev,
+        xp: newXp,
+        happiness: newHappy,
+        fullness: newFullness,
+        coins: newCoins,
+        gems: newGems,
+        lastFedTime: Date.now(),
+        dailyMissions: updatedMissions,
+        lifetimeStats: updatedStats,
+      };
+      const { updatedUnlocked, newlyUnlocked } = checkAndUnlockAchievements(nextState);
+      if (newlyUnlocked.length > 0) {
+        nextState.unlockedBadgeIds = updatedUnlocked;
+        sounds.playLevelUp();
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+      return nextState;
+    });
   };
 
   // Buy or Equip Item in Boutique
@@ -359,6 +398,10 @@ export default function App() {
   const handleToggleMute = () => {
     const nextMuted = sounds.toggleMute();
     setIsMuted(nextMuted);
+    setGameState((prev) => ({ ...prev, soundEnabled: !nextMuted }));
+    if (!nextMuted) {
+      setTimeout(() => sounds.playSquish(), 50);
+    }
   };
 
   return (
@@ -374,6 +417,7 @@ export default function App() {
         onClaimFreeGift={handleClaimDailyReward}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
+        equippedBadgeId={gameState.equippedBadgeId}
       />
 
       {/* Main Tab Screens */}
@@ -389,6 +433,8 @@ export default function App() {
               setLevelUpConfig(config);
             }}
             onNavigateTab={(tab) => setCurrentTab(tab)}
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
           />
         )}
 

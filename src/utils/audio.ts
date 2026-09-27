@@ -353,6 +353,11 @@ class SoundEngine {
     this.isMuted = !this.isMuted;
     return this.isMuted;
   }
+
+  public setMuted(muted: boolean) {
+    this.isMuted = muted;
+    return this.isMuted;
+  }
 }
 
 export const sounds = new SoundEngine();
